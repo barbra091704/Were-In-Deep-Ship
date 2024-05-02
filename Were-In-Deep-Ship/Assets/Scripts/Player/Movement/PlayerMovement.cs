@@ -2,6 +2,8 @@ using Unity.Netcode;
 using UnityEngine;
 using Cinemachine;
 using KWS;
+using Unity.Netcode.Components;
+using System;
 
 public class PlayerMovement : NetworkBehaviour
 {
@@ -17,65 +19,104 @@ public class PlayerMovement : NetworkBehaviour
     [Header("Generic Variables")]
     public NetworkVariable<bool> InWater = new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     public NetworkVariable<float> CurrentStamina = new(100,NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
-    public MovementState CurrentState;
-    public GroundState GroundState = new();
-    public WaterState WaterState = new();
-    public PlayerCamera CameraScript {get; private set;}
     public Transform playerXZRotationObject;
     public Transform playerYRotationObject;
-    public Animator animator;
     public Rigidbody rigidBody;
-    public CinemachineVirtualCamera virtualCamera;
-    public CapsuleCollider capsuleCollider;
-    public Camera playerCam;
-    public Canvas UI;
-    public SkinnedMeshRenderer meshRenderer;
-    public Transform footTransform;
-    public LayerMask groundMask;
-    [HideInInspector] public Quaternion originalRotationObjectRotation;
+    private PlayerCamera cameraScript;
+    [SerializeField] Animator animator;
+    [SerializeField] CinemachineVirtualCamera virtualCamera;
+    [SerializeField] Camera playerCam;
+    [SerializeField] Canvas UI;
+    [SerializeField] SkinnedMeshRenderer meshRenderer;
+    [SerializeField] Transform footTransform;
+    [SerializeField] LayerMask groundMask;
     private InputManager inputManager;
-    public bool canMove = true;
-    public bool isGrounded;
-    public bool isCrouched;
-    public float standingHeight;
-    public float crouchingHeight;
-    public float staminaRegenTimer;
-    private string CurrentAnimationState;
+    public bool CanMove = true;
+    public bool IsGrounded;
+    public bool IsOnSlope;
+    public bool IsClimbingLadder;
+    [SerializeField] bool isCrouched;
+    [SerializeField] float standingHeight;
+    [SerializeField] float crouchingHeight;
+    [SerializeField] float staminaRegenTimer;
+    [SerializeField] float staminaRegenMultiplier;
+    [SerializeField] float staminaDegenMultiplier; 
+    [SerializeField] float staminaTimeToRegen;
+    [SerializeField] float moveSpeed;
+    string CurrentAnimationState;
+    float movementMultiplier = 10f;
     
     [Header("Ground Parameters")]
-    public float walkSpeed;
-    public float sprintSpeed;
-    public float crouchSpeed;
-    public float jumpForce;
-    public float jumpDelay;
-    public float crouchOffset = -0.5f;
-    [HideInInspector] public Vector3 originalCameraHolderLocalPos;
-    public float groundDistance = 0.4f;
-    public float groundStaminaRegenMultiplier;
-    public float groundStaminaDegenMultiplier; 
-    public float groundStaminaTimeToRegen;
+    [SerializeField] float walkSpeed;
+    [SerializeField] float sprintSpeed;
+    [SerializeField] float crouchSpeed;
+    [SerializeField] float jumpForce;
+    [SerializeField] float jumpDelay;
+    [SerializeField] float crouchOffset = -0.5f;
+    [SerializeField] float acceleration = 10f;
+    [SerializeField] float groundDistance = 0.4f;
+    [SerializeField] float airMultiplier = 0.4f;
+
+    [Header("Drag")]
+    [SerializeField] float groundDrag = 6f;
+    [SerializeField] float airDrag = 2f;
+    [SerializeField] float waterDrag = 4f;
+    [SerializeField] float climbingDrag = 6;
 
     [Header("Water Parameters")]
-    public float swimSpeed;
-    public float sprintSwimSpeed;
-    public float sinkSpeed;
-    public float floatSpeed;
-    public float waterStaminaRegenMultiplier;
-    public float waterStaminaDegenMultiplier;
-    public float waterStaminaTimeToRegen;
+    [SerializeField] float swimSpeed;
+    [SerializeField] float sprintSwimSpeed;
+    [SerializeField] float sinkSpeed;
+    [SerializeField] float floatSpeed;
+    [SerializeField] float verticalYWaterOffset;
 
     [Header("Climbing Parameters")]
-    public float climbSpeed;
+    [SerializeField] float climbSpeed;
 
+    Vector2 moveInput;
+    Vector3 moveDirection;
+    Vector3 slopeMoveDirection;
+    RaycastHit slopeHit;
+    public float buoyancy;
+    bool WasInWater;
+    private int weight;
+    private Ladder activeLadder;
+    private bool exitLadder; 
+    private AnticipatedNetworkTransform anticipatedNetworkTransform;
+
+    
+    private bool OnSlope()
+    {
+        if (Physics.Raycast(transform.position, Vector3.down, out slopeHit, 2 / 2 + 0.5f))
+        {
+            if (slopeHit.normal != Vector3.up)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return false;
+    }
     public void Start()
     {
         if (!IsOwner) return;
-        inputManager = InputManager.Instance;
 
-        originalCameraHolderLocalPos = CameraScript.camHolder.localPosition;
-        CurrentState = GroundState;
-        CurrentState.EnterState(this);
+        inputManager = InputManager.Instance;
+        cameraScript = GetComponent<PlayerCamera>();
+        GetComponent<Inventory>().CurrentWeight.OnValueChanged += SetWeight;
+
+        anticipatedNetworkTransform = GetComponent<AnticipatedNetworkTransform>();
     }
+
+
+    private void SetWeight(int previousValue, int newValue)
+    {
+        weight = newValue;
+    }
+
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
@@ -88,59 +129,206 @@ public class PlayerMovement : NetworkBehaviour
         {   
             virtualCamera.Priority = 1;
             meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
-            CameraScript = GetComponent<PlayerCamera>();
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
     }
     void Update()
     {
-        if (!IsOwner || !canMove) return;
-        IsGroundedCheck();
+        if (!IsOwner || !CanMove) return;
+
+        if (rigidBody.velocity.magnitude < 1f && moveInput.x == 0 && moveInput.y == 0 && IsGrounded && OnSlope())
+        {
+            rigidBody.velocity = Vector3.zero;
+            rigidBody.useGravity = false;
+        } 
+        else
+        {
+            rigidBody.useGravity = true;
+        }
+        
+        InWater.Value = WaterSystem.IsPositionUnderWater(new(transform.position.x, transform.position.y + verticalYWaterOffset, transform.position.z));
+        IsGrounded = Physics.CheckSphere(footTransform.position, groundDistance, groundMask, QueryTriggerInteraction.Ignore) && !InWater.Value;
+        moveInput = inputManager.GetPlayerMovement();
+        switch(InWater.Value)
+        {
+            case true:
+                rigidBody.useGravity = false;
+                break;
+            case false:
+                rigidBody.useGravity = true;
+                break;
+        }
+
         UpdateInput();
-        JumpPressed = inputManager.JumpedThisFrame() && isGrounded && !isCrouched;
-        CurrentState.UpdateState(this, JumpPressed);
-        SurfaceCheck();
+        MyInput();
+        ControlDrag();
+        ControlSpeed();
         AnimationCheck();
+
+        if (!InWater.Value)
+        {
+            if (JumpPressed)
+            {
+                Jump();
+            }
+        }
+        else
+        {
+            WasInWater = true;
+            float weightFactor = 1 - (weight / 40.0f);
+
+            buoyancy = FloatHeld ? floatSpeed + weightFactor : SinkHeld ? sinkSpeed + weightFactor : weightFactor;
+        }
+        if (IsGrounded)
+        {
+            WasInWater = false;
+        }
+        
+        slopeMoveDirection = Vector3.ProjectOnPlane(moveDirection, slopeHit.normal);
+    }
+    private void MyInput()
+    {
+        if (InWater.Value && !IsGrounded)
+        {
+            moveDirection = moveInput.y * cameraScript.camHolder.forward + moveInput.x * cameraScript.camHolder.right;
+        }
+        else if (!InWater.Value)
+        { 
+            moveDirection = moveInput.y * playerYRotationObject.forward + moveInput.x * playerYRotationObject.right;
+        }
+    }
+    private void Jump()
+    {
+        rigidBody.velocity = new(rigidBody.velocity.x, 0, rigidBody.velocity.z);
+        rigidBody.AddForce(transform.up * jumpForce, ForceMode.Impulse);
+    }
+    void ControlDrag()
+    {
+        if (IsClimbingLadder)
+        {
+            rigidBody.drag = climbingDrag;
+        }
+        else if (IsGrounded)
+        {
+            rigidBody.drag = groundDrag;
+        }
+        else if (InWater.Value || WasInWater)
+        {
+            rigidBody.drag = waterDrag;
+        }
+        else
+        {
+            rigidBody.drag = airDrag;
+        }
     }
 
+    void ControlSpeed()
+    {
+        // Calculate weight factor, will be 1 when Weight is 0, and goes down to 0.2 when Weight is 250 or more.
+        float weightFactor = Math.Max(1 - (Math.Min(weight, 250) * 0.8f / 250.0f), 0.2f);
+
+        if (SprintHeld)
+        {
+            if (!InWater.Value)
+                moveSpeed = Mathf.Lerp(moveSpeed, sprintSpeed * weightFactor, acceleration * Time.deltaTime);
+            else
+                moveSpeed = Mathf.Lerp(moveSpeed, sprintSwimSpeed * weightFactor, acceleration * Time.deltaTime);
+        }
+        else
+        {
+            if (!InWater.Value)
+                moveSpeed = Mathf.Lerp(moveSpeed, walkSpeed * weightFactor, acceleration * Time.deltaTime);
+            else
+                moveSpeed = Mathf.Lerp(moveSpeed, swimSpeed * weightFactor, acceleration * Time.deltaTime);
+        }
+    }
+
+    public void OnLadder(Vector3 startPosition, Ladder ladder)
+    {
+        IsClimbingLadder = true;
+        rigidBody.isKinematic = true;
+        activeLadder = ladder;
+        rigidBody.position = startPosition;
+        print("entered ladder");
+    }
+
+    public void ExitLadder(bool teleport)
+    {
+        if (activeLadder != null)
+        {
+            IsClimbingLadder = false;
+            rigidBody.isKinematic = false;
+            print("exit ladder");
+
+            if (teleport) 
+            {
+                rigidBody.position = activeLadder.GetEndPos();
+            }
+            activeLadder = null;
+        }
+    }
     private void FixedUpdate()
     {
-        if (!IsOwner || !canMove) return;
+        if (!IsOwner || !CanMove) return;
 
-        CurrentState.FixedUpdateState(this, inputManager.GetPlayerMovement());
-    }
-
-    public void IsGroundedCheck(){
-        isGrounded = Physics.CheckSphere(footTransform.position, groundDistance, groundMask);
-    }
-    private void ChangeState(MovementState state)
-    {
-        CurrentState = state;
-        CurrentState.EnterState(this);
-    }
-    void SurfaceCheck()
-    {
-        if (WaterSystem.IsPositionUnderWater(new(transform.position.x, transform.position.y + 1.15f, transform.position.z)))
+        anticipatedNetworkTransform.AnticipateMove(rigidBody.position + rigidBody.velocity * Time.fixedDeltaTime);
+        if (IsClimbingLadder)
         {
-            InWater.Value = true;
-            ChangeState(WaterState);
+            MoveOnLadder();
         }
-        else if (CurrentState != GroundState) // Check if not already in GroundState
+        else
         {
-            InWater.Value = false;
-            ChangeState(GroundState);
+            MovePlayer();
+        }
+
+    }
+
+    void MoveOnLadder()
+    {
+        if (moveInput.y != 0)
+        {
+            float climbingSpeed = moveInput.y * climbSpeed * Time.deltaTime;
+            rigidBody.MovePosition(transform.position + Vector3.up * climbingSpeed);
+        }
+    }
+
+    void MovePlayer()
+    {
+        if (IsGrounded && !OnSlope())
+        {
+            rigidBody.AddForce(movementMultiplier * moveSpeed * moveDirection.normalized, ForceMode.Acceleration);
+        }
+        else if (IsGrounded && OnSlope())
+        {
+            rigidBody.AddForce(movementMultiplier * moveSpeed * slopeMoveDirection.normalized, ForceMode.Acceleration);
+        }
+        else if (!IsGrounded && !InWater.Value)
+        {
+            rigidBody.AddForce(airMultiplier * movementMultiplier * moveSpeed * moveDirection.normalized, ForceMode.Acceleration);
+        }
+        else if (!IsGrounded && InWater.Value)
+        {
+            rigidBody.AddForce(movementMultiplier * moveSpeed * moveDirection.normalized, ForceMode.Acceleration);
+            rigidBody.AddForce(Vector3.up * buoyancy, ForceMode.Acceleration);
         }
     }
 
     private void UpdateInput()
     {
-        SprintHeld = inputManager.SprintIsHeld() && !isCrouched && CurrentStamina.Value > 0 && inputManager.GetPlayerMovement().y > 0;
-        FastSwimHeld = inputManager.SprintIsHeld() && !isCrouched && CurrentStamina.Value > 0 && inputManager.GetPlayerMovement().y > 0;
-        CrouchPressed = inputManager.CrouchedThisFrame() && !InWater.Value && isGrounded;
-        CrouchIsHeld = inputManager.CrouchIsHeld() && !InWater.Value && isGrounded;
+        SprintHeld = inputManager.SprintIsHeld() && !isCrouched && CurrentStamina.Value > 0 && moveInput.y > 0;
+
+        FastSwimHeld = inputManager.SprintIsHeld() && !isCrouched && CurrentStamina.Value > 0 && moveInput.y > 0;
+
+        CrouchPressed = inputManager.CrouchedThisFrame() && !InWater.Value && IsGrounded;
+
+        CrouchIsHeld = inputManager.CrouchIsHeld() && !InWater.Value && IsGrounded;
+
         SinkHeld = inputManager.CrouchIsHeld() && InWater.Value;
+
         FloatHeld = inputManager.JumpIsHeld() && InWater.Value;
+        
+        JumpPressed = inputManager.JumpedThisFrame() && IsGrounded && !isCrouched;
     }
 
     private void AnimationCheck()
@@ -151,11 +339,11 @@ public class PlayerMovement : NetworkBehaviour
         {
             if (SprintHeld)
             {
-                if (CurrentState == GroundState && isGrounded)
+                if (!InWater.Value)
                 {
                     state = "Sprinting";
                 }
-                else if (CurrentState == WaterState)
+                else if (InWater.Value)
                 {
                     state = "Fast Swimming";
                 }
@@ -166,11 +354,11 @@ public class PlayerMovement : NetworkBehaviour
                 {
                     state = "Crouch Walk";
                 }
-                else if (CurrentState == GroundState && isGrounded)
+                else if (!InWater.Value && IsGrounded)
                 {
                     state = "Walking";
                 }
-                else if (CurrentState == WaterState)
+                else if (InWater.Value)
                 {
                     state = "Swimming";
                 }
@@ -182,11 +370,11 @@ public class PlayerMovement : NetworkBehaviour
             {
                 state = "Crouch Walk Backwards";
             }
-            else if (CurrentState == GroundState && isGrounded)
+            else if (!InWater.Value && IsGrounded)
             {
                 state = "Walking Backwards";
             }
-            else if (CurrentState == WaterState)
+            else if (InWater.Value)
             {
                 state = "Swimming Backwards";
             }
@@ -197,11 +385,11 @@ public class PlayerMovement : NetworkBehaviour
             {
                 state = "Crouch";
             }
-            else if (CurrentState == GroundState && isGrounded)
+            else if (!InWater.Value && IsGrounded)
             {
                 state = "Idle";
             }
-            else if (CurrentState == WaterState)
+            else if (InWater.Value)
             {
                 state = "Floating";
             }
@@ -212,7 +400,6 @@ public class PlayerMovement : NetworkBehaviour
         }
     }
 
-
     public void ChangeAnimationState(string state)
     {
         if (CurrentAnimationState != state)
@@ -222,7 +409,4 @@ public class PlayerMovement : NetworkBehaviour
         }
     }
 
-    public float CurrentMaxSwimSpeed { get { return SprintHeld ? sprintSwimSpeed : swimSpeed; } }
-
-    public float CurrentMaxBuoyancy { get { return FloatHeld ? floatSpeed : sinkSpeed; } }
 }

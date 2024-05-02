@@ -42,7 +42,7 @@ public class TimeManager : NetworkBehaviour
 
             ResetSunRotation();
 
-            SetDays();
+            //SetDays();
         }
     }
 

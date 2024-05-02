@@ -21,13 +21,13 @@ public class DivingSuit : ScriptableObject, IEquippable
 
         water.Transparent = 25;
 
-        health.Resistance.Value = DamageResistance;
+        health.SetResistanceRpc(DamageResistance);
 
-        oxygen.DepthBeforeCustomRates.Value = DepthRating;
+        oxygen.SetDepthThresholdRpc(DepthRating);
 
-        oxygen.CurrentOxygenTankCapacity.Value = OxygenCapacity;
+        oxygen.SetOxygenTankCapacityRpc(OxygenCapacity);
 
-        oxygen.CurrentOxygenTankLevel.Value = oxygen.CurrentOxygenTankCapacity.Value;
+        oxygen.SetOxygenLevelRpc(oxygen.CurrentOxygenTankCapacity.Value);
     }
 
 }

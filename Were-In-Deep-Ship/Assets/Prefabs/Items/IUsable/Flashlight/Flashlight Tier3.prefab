@@ -12,13 +12,14 @@ GameObject:
   - component: {fileID: 5235999527995189966}
   - component: {fileID: 4536620522170486278}
   - component: {fileID: 2919473185079513312}
+  - component: {fileID: 1165662128810248840}
   - component: {fileID: 6598563703043007472}
   - component: {fileID: 2579969730253084165}
   - component: {fileID: 515657145362344666}
   - component: {fileID: 3122177061450100807}
   - component: {fileID: 2142663646954845808}
-  - component: {fileID: 5447287310165050858}
-  - component: {fileID: -7910820889848073368}
+  - component: {fileID: 584401277560796900}
+  - component: {fileID: 6586563301822517212}
   m_Layer: 6
   m_Name: Flashlight Tier3
   m_TagString: Item
@@ -78,7 +79,7 @@ MonoBehaviour:
   ID: 3
   ItemType: 4
   KeyType: 0
-  itemImage: {fileID: 0}
+  itemImage: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
   ItemTier:
     m_InternalValue: 3
   ItemWeight:
@@ -92,17 +93,11 @@ MonoBehaviour:
   IsOnFloatingPlatform:
     m_InternalValue: 0
   equippable: {fileID: 0}
-  gravitySpeed: 5
-  groundOffset: 1.5
   minMaxWeight: {x: 4, y: 5}
   minMaxValue: {x: 0, y: 0}
   minMaxDrag: {x: 0, y: 5}
-  layerMask:
-    serializedVersion: 2
-    m_Bits: 8
-  originalRotation: {x: 0, y: 0, z: 0, w: 0}
-  originalScale: {x: 0, y: 0, z: 0}
   ItemName: LED Flashlight
+  rb: {fileID: 0}
   showVariables: 1
 --- !u!114 &2919473185079513312
 MonoBehaviour:
@@ -119,6 +114,26 @@ MonoBehaviour:
   IsOn:
     m_InternalValue: 0
   bulb: {fileID: 8979138915542491356}
+--- !u!114 &1165662128810248840
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1691527631103769181}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe82fc34be434994b9c560951d0226f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  BatteryLevel:
+    m_InternalValue: 100
+  IsDraining:
+    m_InternalValue: 0
+  MaxBatteryLevel: 100
+  drainAmount: 1
+  drainInterval: 0.5
+  drainTimer: 0
 --- !u!1773428102 &6598563703043007472
 ParentConstraint:
   m_ObjectHideFlags: 0
@@ -164,7 +179,7 @@ Rigidbody:
     m_Bits: 0
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
-  m_UseGravity: 0
+  m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
   m_Constraints: 112
@@ -184,7 +199,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -241,7 +256,7 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1691527631103769181}
   m_Mesh: {fileID: -706379669577712898, guid: 2f59261d021dc7b4b9a252ca48df033a, type: 3}
---- !u!114 &5447287310165050858
+--- !u!114 &584401277560796900
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -250,16 +265,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 1691527631103769181}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f98539990730ab459fd5426fbfec5a0, type: 3}
+  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   UseUnreliableDeltas: 0
   SyncPositionX: 1
   SyncPositionY: 1
   SyncPositionZ: 1
-  SyncRotAngleX: 1
-  SyncRotAngleY: 1
-  SyncRotAngleZ: 1
+  SyncRotAngleX: 0
+  SyncRotAngleY: 0
+  SyncRotAngleZ: 0
   SyncScaleX: 0
   SyncScaleY: 0
   SyncScaleZ: 0
@@ -272,8 +287,7 @@ MonoBehaviour:
   InLocalSpace: 0
   Interpolate: 1
   SlerpPosition: 0
-  authorityMode: 1
---- !u!114 &-7910820889848073368
+--- !u!114 &6586563301822517212
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

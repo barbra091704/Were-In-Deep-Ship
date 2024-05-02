@@ -421,16 +421,16 @@ MonoBehaviour:
     friendlySpawnAmount: 0
   waterSpawnSchedules:
   - spawnTime: 5
-    enemySpawnAmount: 3
-    friendlySpawnAmount: 25
+    enemySpawnAmount: 15
+    friendlySpawnAmount: 100
   - spawnTime: 15
     enemySpawnAmount: 3
     friendlySpawnAmount: 15
   waterEntities:
-  - prefab: {fileID: 2506369540350559105, guid: 2522b9bf35bec4a489c5f99c05c365c6,
+  - prefab: {fileID: 2668459530029642311, guid: f69bbc0b683cfad42b7c01ec671462d1,
       type: 3}
     entityData: {fileID: 11400000, guid: 4f326da137a3a2f428897464d602259c, type: 2}
-  - prefab: {fileID: 2506369540350559105, guid: 34d8dc3efccb44a4d9506e75539120f4,
+  - prefab: {fileID: 2876662426396050822, guid: 1b8ae5d6f860301498d94e811bbf25c8,
       type: 3}
     entityData: {fileID: 11400000, guid: d5694f7d25930134493ac9c9b704ae45, type: 2}
   landEntities:

@@ -1,5 +1,10 @@
 using UnityEngine;
 
+public enum EntityT
+{
+
+}
+
 [CreateAssetMenu(menuName = "AI/Entity/EntityData")]
 public class EntityData : ScriptableObject
 {
@@ -10,6 +15,8 @@ public class EntityData : ScriptableObject
     public int HearingRange;
 
     [Header("General Params")]
+    public Vector2 SizeMinMax;
+    public EntityType EntityType;
     public int EntityID;
     public int MaxHealth;
     public int WanderSpeed;
@@ -20,7 +27,7 @@ public class EntityData : ScriptableObject
     public int Stamina;
     public int DamageResistance;
     public int WanderRadius;
-    public int AttackStopDistance;
+    public float AttackStopDistance;
     [Header("Attacking Params")]
     public bool CanAttack;
     public int DamageInterval;

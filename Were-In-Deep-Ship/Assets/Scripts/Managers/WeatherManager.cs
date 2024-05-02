@@ -36,7 +36,7 @@ public class WeatherManager : NetworkBehaviour
     }
     public override void OnNetworkSpawn()
     {
-        if (IsServer) GameManager.Singleton.CurrentLocationData.OnValueChanged += SetWeatherState;
+        if (IsServer) GameManager.Singleton.CurrentLocation.OnValueChanged += SetWeatherState;
     }
 
     private WeatherStats GetRandomWeatherCondition()
@@ -53,7 +53,7 @@ public class WeatherManager : NetworkBehaviour
         return WeatherConditions[0]; 
     }
 
-    private void SetWeatherState(LocationData previousValue, LocationData newValue)
+    private void SetWeatherState(LocationData old, LocationData newValue)
     {
         if (newValue.ID == 0) return;
 

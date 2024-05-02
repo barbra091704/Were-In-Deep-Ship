@@ -9,14 +9,16 @@ public class WaterEntityAttackState : WaterEntityBaseState
     {
         currentAttackAmount = 0;
         lastDamageTime = 0;
+        main.ChangeAnimationState(main.ChaseAnimationName);
     }
 
     public override void FixedUpdateState(WaterEntityAI main)
     {
-        if (Vector3.Distance(main.Rigidbody.position, main.Target.position) > main.entityData.AttackStopDistance)
+        if (Vector3.Distance(main.entityFront.position, main.Target.position) >= main.entityData.AttackStopDistance)
         {
             if (main.Target.position.y >= main.entityData.DepthRange.x && main.Target.position.y <= main.entityData.DepthRange.y)
             {
+                main.ChangeAnimationState(main.ChaseAnimationName);
                 Vector3 direction = (main.Target.position - main.Rigidbody.position).normalized;
 
                 Debug.DrawLine(main.transform.position, main.Target.position, Color.red);
@@ -34,14 +36,18 @@ public class WaterEntityAttackState : WaterEntityBaseState
         {
             if (!attacked)
             {
-                main.Target.GetComponent<PlayerHealth>().TakeDamageRpc(main.entityData.AttackDamage, true);
+                main.ChangeAnimationState(main.AttackAnimationName);
+                main.Target.root.TryGetComponent(out IDamagable damagable);
+                damagable?.TakeDamage(main.entityData.AttackDamage, true);
                 lastDamageTime = Time.time;
                 currentAttackAmount++;
                 attacked = true;
             }
             else if (Time.time >= lastDamageTime + main.entityData.DamageInterval && currentAttackAmount < main.entityData.AttackAmount)
             {
-                main.Target.GetComponent<PlayerHealth>().TakeDamageRpc(main.entityData.AttackDamage, true);
+                main.ChangeAnimationState(main.AttackAnimationName);
+                main.Target.root.TryGetComponent(out IDamagable damagable);
+                damagable?.TakeDamage(main.entityData.AttackDamage, true);
                 lastDamageTime = Time.time;
                 currentAttackAmount++;
             }

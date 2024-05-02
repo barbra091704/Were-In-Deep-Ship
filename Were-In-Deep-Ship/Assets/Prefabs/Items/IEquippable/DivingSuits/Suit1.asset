@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 62725aac7c756554b9067983db721e5d, type: 3}
   m_Name: Suit1
   m_EditorClassIdentifier: 
-  Level: 0
+  Level: 1
   OxygenCapacity: 100
   DamageResistance: 10
   DepthRating: 100

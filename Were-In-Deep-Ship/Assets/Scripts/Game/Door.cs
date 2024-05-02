@@ -30,7 +30,7 @@ public class Door : NetworkBehaviour, IInteractable
         gameObject.SetActive(true);
     }
 
-    public void Interact(RaycastHit hit, NetworkObject Player)
+    public void Interact<T>(RaycastHit hit, NetworkObject Player, T type)
     {
         DoorHandlerRpc(new(Player));
     }
@@ -44,7 +44,7 @@ public class Door : NetworkBehaviour, IInteractable
             else if (Player.TryGetComponent(out Inventory inventory)){
                 if (inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo != null && inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo.ItemType == ItemType.Key){
                     if (inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo.KeyType == KeyType){
-                        inventory.RemoveItemBySlotRpc(true, inventory.CurrentSlot.Value, inventory.NetworkObject);
+                        inventory.RemoveItemBySlotRpc(true, inventory.CurrentSlot.Value);
                         SetDoorLockState(false);
                     }
                 } 

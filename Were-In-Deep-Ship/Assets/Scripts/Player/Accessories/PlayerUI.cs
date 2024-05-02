@@ -2,8 +2,6 @@ using UnityEngine.UI;
 using UnityEngine;
 using Unity.Netcode;
 using TMPro;
-using System;
-using UnityEngine.SceneManagement;
 
 public class PlayerUI : NetworkBehaviour
 {
@@ -13,16 +11,15 @@ public class PlayerUI : NetworkBehaviour
     [SerializeField] private Image suitImage;
     public Slider interactionSlider;
     public Slider staminaSlider;
+    public Slider batterySlider;
     public Transform inventoryUI;
-    public Image QuestItemSprite;
-    public TMP_Text QuestItemName;
-    public TMP_Text QuestDaysLeft;
     public TMP_Text HealthText;
     public TMP_Text OxygenLevelText;
     public TMP_Text OxygenCapacityText;
     public TMP_Text ArmorLevelText;
     public TMP_Text DepthText;
     public TMP_Text DepthRateText;
+    private Battery currentBattery;
 
     [Header("ITEM HUD")]
     public GameObject ItemHUD;
@@ -34,19 +31,20 @@ public class PlayerUI : NetworkBehaviour
     private int questDays;
     public override void OnNetworkSpawn()
     {
-        if (!IsOwner || SceneManager.GetActiveScene() == SceneManager.GetSceneByName("Lobby")) return; 
+        if (!IsOwner) return; 
 
         Inventory inventory = GetComponent<Inventory>();
         inventory.UISelectSlotEvent += SelectSlot;
         inventory.UISetSlotImageEvent += SetItemImageUI;
         inventory.UISetArmorEvent += SetArmorUI;
+        inventory.BatteryUpdateCheck += SetBatterySliderFromSelectedSlotChange;
 
         PlayerHealth playerHealth = GetComponent<PlayerHealth>();
         playerHealth.Health.OnValueChanged += SetHealthDisplay;
         playerHealth.Resistance.OnValueChanged += SetArmorDisplay;
 
         Oxygen oxygen = GetComponent<Oxygen>();
-        oxygen.CurrentOxygenTankLevel.OnValueChanged += SetOxygenLevelDisplay;
+        oxygen.CurrentOxygenLevel.OnValueChanged += SetOxygenLevelDisplay;
         oxygen.CurrentOxygenTankCapacity.OnValueChanged += SetOxygenCapacityDisplay;
         oxygen.DepthBeforeCustomRates.OnValueChanged += SetDepthRateDisplay;
 
@@ -60,26 +58,25 @@ public class PlayerUI : NetworkBehaviour
         PlayerMovement playerMovement = GetComponent<PlayerMovement>();
         playerMovement.CurrentStamina.OnValueChanged += SetPlayerMovementCurrentStamina;
 
-        QuestManager.Singleton.SetQuestItemInfo += SetQuestItemInfo;
-        TimeManager.Singleton.DaysPassed.OnValueChanged += SetDaysLeft;
     }
 
 
     public override void OnNetworkDespawn()
     {
-        if (!IsOwner || SceneManager.GetActiveScene() == SceneManager.GetSceneByName("Lobby")) return; 
+        if (!IsOwner) return; 
 
         Inventory inventory = GetComponent<Inventory>();
         inventory.UISelectSlotEvent -= SelectSlot;
         inventory.UISetSlotImageEvent -= SetItemImageUI;
         inventory.UISetArmorEvent -= SetArmorUI;
+        inventory.BatteryUpdateCheck -= SetBatterySliderFromSelectedSlotChange;
 
         PlayerHealth playerHealth = GetComponent<PlayerHealth>();
         playerHealth.Health.OnValueChanged -= SetHealthDisplay;
         playerHealth.Resistance.OnValueChanged -= SetArmorDisplay;
 
         Oxygen oxygen = GetComponent<Oxygen>();
-        oxygen.CurrentOxygenTankLevel.OnValueChanged -= SetOxygenLevelDisplay;
+        oxygen.CurrentOxygenLevel.OnValueChanged -= SetOxygenLevelDisplay;
         oxygen.CurrentOxygenTankCapacity.OnValueChanged -= SetOxygenCapacityDisplay;
         oxygen.DepthBeforeCustomRates.OnValueChanged -= SetDepthRateDisplay;
 
@@ -93,8 +90,6 @@ public class PlayerUI : NetworkBehaviour
         PlayerMovement playerMovement = GetComponent<PlayerMovement>();
         playerMovement.CurrentStamina.OnValueChanged -= SetPlayerMovementCurrentStamina;
 
-        QuestManager.Singleton.SetQuestItemInfo -= SetQuestItemInfo;
-        TimeManager.Singleton.DaysPassed.OnValueChanged -= SetDaysLeft;
     }
 
     private void SelectSlot(int current)
@@ -106,19 +101,6 @@ public class PlayerUI : NetworkBehaviour
             }
         }
         slotBackroundImages[current].transform.localScale = new Vector3(1.1f,1.1f,1.1f);
-    }
-    private void SetQuestItemInfo(Sprite sprite, string name, int days)
-    {
-        QuestItemName.text = name;
-        QuestItemSprite.sprite = sprite;
-
-        questDays = days;
-        QuestDaysLeft.text = $"{questDays} Days Remaining.";
-    }
-    private void SetDaysLeft(int old, int value)
-    {
-        questDays--;
-        QuestDaysLeft.text = $"{questDays} Days Remaining.";
     }
 
     private void SetPlayerMovementCurrentStamina(float old, float value)
@@ -162,6 +144,10 @@ public class PlayerUI : NetworkBehaviour
     {
         DepthText.text = $"Depth: {value}m";
     }
+    private void ToggleItemHUD()
+    {
+        ItemHUD.SetActive(false);
+    }
     private void SetHoverDisplayToItemInfo(Collider collider)
     {
         if (collider != null)
@@ -180,9 +166,26 @@ public class PlayerUI : NetworkBehaviour
         }
         
     }
-    private void ToggleItemHUD()
+    private void OnBatteryLevelChangedSlider(int old, int newValue)
     {
-        ItemHUD.SetActive(false);
+        if (currentBattery != null)
+        {
+            batterySlider.value = currentBattery.BatteryLevel.Value;
+        }
     }
-
+    private void SetBatterySliderFromSelectedSlotChange(InventorySlot selectedSlot)
+    {
+        if (selectedSlot.itemInfo != null && selectedSlot.itemInfo.TryGetComponent(out Battery battery))
+        {
+            batterySlider.value = battery.BatteryLevel.Value;
+            currentBattery = battery;
+            currentBattery.BatteryLevel.OnValueChanged += OnBatteryLevelChangedSlider;
+        }
+        else
+        {
+            if (currentBattery != null) currentBattery.BatteryLevel.OnValueChanged -= OnBatteryLevelChangedSlider;
+            currentBattery = null;
+            batterySlider.value = 0;
+        }
+    }
 }

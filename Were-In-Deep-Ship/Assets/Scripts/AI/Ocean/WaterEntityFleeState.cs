@@ -9,6 +9,7 @@ public class WaterEntityFleeState : WaterEntityBaseState
         // Pick a random direction within a 45-degree angle away from the player
         float angle = Random.Range(-45f, 45f);
         fleeDirection = Quaternion.Euler(0f, angle, 0f) * (main.transform.position - main.Target.position).normalized;
+        main.ChangeAnimationState(main.FleeAnimationName); 
     }
 
     public override void FixedUpdateState(WaterEntityAI main)
@@ -26,6 +27,7 @@ public class WaterEntityFleeState : WaterEntityBaseState
         else
         {
             main.ChangeState(main.WanderState);
+            main.ChangeAnimationState("Shark_Swim");
         }
     }
 }

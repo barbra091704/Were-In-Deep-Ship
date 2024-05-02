@@ -197,7 +197,7 @@ public class EntityManager : NetworkBehaviour
 
         entity.Spawn();
 
-        SceneManager.MoveGameObjectToScene(entity.gameObject, GameManager.Singleton.CurrentLocationScene);
+        SceneManager.MoveGameObjectToScene(entity.gameObject, SceneManager.GetSceneByName(GameManager.Singleton.CurrentLocation.Value.SceneName));
 
         spawnedEntities.Add(entity);
         
@@ -213,10 +213,16 @@ public class EntityManager : NetworkBehaviour
 }
 
 [Serializable]
-public enum EntityType
+public enum EntityTerrainType
 {
     Water,
     Land,
+}   
+[Serializable]
+public enum EntityType
+{
+    Predator,
+    Friendly
 }
 [Serializable]
 public enum MapDangerLevel

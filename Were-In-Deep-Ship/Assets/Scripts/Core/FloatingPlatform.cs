@@ -6,7 +6,7 @@ public class FloatingPlatform : MonoBehaviour
     public float floatOffset = 1;
     public void Update()
     {
-        float targetY = WaterData.Singleton.GetWaterHeight(new(transform.position.x, transform.position.y + floatOffset, transform.position.z));
+        float targetY = WaterManager.Singleton.GetWaterHeight(new(transform.position.x, transform.position.y + floatOffset, transform.position.z));
         desiredPosition = new(0, targetY, 0);
         float boatPosY = desiredPosition.y - transform.position.y;
 

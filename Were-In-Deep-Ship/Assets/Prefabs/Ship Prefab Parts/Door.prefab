@@ -104,7 +104,7 @@ MonoBehaviour:
   IsOpen:
     m_InternalValue: 0
   KeyType: 0
-  LockChance: 10
+  LockChance: 1
   DoorHinge: {fileID: 6831863623913864338}
   anim: {fileID: 1161729246236387857}
 --- !u!65 &8127199451939572059

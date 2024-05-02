@@ -1,98 +1,151 @@
-using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
-using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine.SceneManagement;
-using System.Collections.Generic;
-using System.Collections;
+using System;
+using Unity.Collections;
 
-public class GameManager : NetworkBehaviour
+[Serializable]
+public struct LocationData : INetworkSerializable
 {
-    public static GameManager Singleton {get; private set;}
-    public NetworkVariable<int> Credits = new(100);
-    public NetworkVariable<int> CurrentBoatID = new();
-    public Transform PierTransform;
-    public SceneUI sceneUI;
-    [HideInInspector] public NetworkVariable<LocationData> CurrentLocationData = new();
-    [HideInInspector] public NetworkList<PlayerData> PlayerDatas;
-    [HideInInspector] public Scene CurrentLocationScene;
-    [HideInInspector] public Scene PreviousLocationScene;
-    public LocationData[] Locations;
-    public DepthDepletionRate[] OxygenDepthDepletionRates;
-    public ItemInfo[] Items;
+    public string SceneName;
+    public int ID;
+    public int Cost;
 
-    void Awake()
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
-        PlayerDatas = new();
+        serializer.SerializeValue(ref SceneName);
+        serializer.SerializeValue(ref ID);
+        serializer.SerializeValue(ref Cost);
+    }
+}
+[Serializable]
+public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
+{
+    public FixedString64Bytes Name;
+    public NetworkObjectReference Reference;
+    public ulong clientID;
+    public bool IsAlive;
 
-        if (Singleton != null && Singleton != this) Destroy(this);
-        else Singleton = this;
+    public readonly bool Equals(PlayerData other)
+    {
+        if (other.Name == Name && other.clientID == clientID)
+        {
+            return true;
+        }
+        return false;
     }
 
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref Name);
+        serializer.SerializeValue(ref Reference);
+        serializer.SerializeValue(ref clientID);
+        serializer.SerializeValue(ref IsAlive);
+    }
+}
+[Serializable]
+public enum GameOverReason
+{
+    Quest,
+    Death,
+} 
+public class GameManager : NetworkBehaviour
+{
+    public static GameManager Singleton;
+
+    public NetworkVariable<int> Credits = new(100);
+    public Transform PierTransform;
+    public LocationData[] Locations;
+    public NetworkVariable<LocationData> CurrentLocation = new();
+    [HideInInspector] public NetworkList<PlayerData> PlayerDatas;
+    [SerializeField] private List<PlayerData> serverPlayerDatas;
+    public List<DivingSuit> DivingSuits = new();
+    public List<ItemInfo> Items = new();
+    private Scene CurrentLocationScene;
+    private Scene PreviousLocationScene;
+    public void Awake()
+    {
+        PlayerDatas = new();
+        Singleton = Singleton != null && Singleton != this ? null : this;
+    }
     public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
             NetworkManager.OnClientDisconnectCallback += RemovePlayerDataRpc;
 
-            CurrentLocationData.Value = new(){
-                Name = Locations[0].Name,
-                ID = Locations[0].ID,
-                Cost = Locations[0].Cost,
-            };
+            PlayerDatas.OnListChanged += SetServerPlayerDataList;
+
+            CurrentLocation.Value = Locations[0];
+
+            SceneManager.SetActiveScene(gameObject.scene);
         }
 
-        SceneManager.SetActiveScene(gameObject.scene);
-
-        CurrentLocationData.OnValueChanged += HandleNewLocation;
-        
-        TimeManager.Singleton.TickEventTriggered += CheckGameTime;
+        CurrentLocation.OnValueChanged += HandleNewLocation;
     }
 
-    private void CheckGameTime(float time)
+    private void SetServerPlayerDataList(NetworkListEvent<PlayerData> changeEvent)
     {
-        if (time >= (TimeManager.Singleton.maxGameTimeInMinutes * 60))
-        {   
-            CurrentLocationData.Value = new(){
-                Name = Locations[0].Name,
-                ID = Locations[0].ID,
-                Cost = Locations[0].Cost,
-            };
+        switch(changeEvent.Type)
+        {
+            case NetworkListEvent<PlayerData>.EventType.Add:
+                serverPlayerDatas.Add(changeEvent.Value);
+                break;
+            case NetworkListEvent<PlayerData>.EventType.Remove:
+                serverPlayerDatas.Remove(changeEvent.Value);
+                break;
+            case NetworkListEvent<PlayerData>.EventType.Clear:
+                serverPlayerDatas.Clear();
+                break;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        CurrentLocation.OnValueChanged -= HandleNewLocation;
+        if (IsServer)
+        {
+            NetworkManager.OnClientDisconnectCallback -= RemovePlayerDataRpc;
+        }
+    }
+    [Rpc(SendTo.Server)]
+    public void LoadLocationRpc(int id)
+    {
+        foreach (var item in Locations)
+        {
+            if (item.ID == id)
+            {
+                CurrentLocation.Value = item;
+            }
         }
     }
     private void HandleNewLocation(LocationData previousValue, LocationData newValue)
     {
-        if (!previousValue.Equals(newValue))
-        {
-            StartCoroutine(DelayedHandling(previousValue, newValue));
-        }
+        StartCoroutine(DelayedHandleNewLocation(previousValue, newValue));
     }
-
-    private IEnumerator DelayedHandling(LocationData previousValue, LocationData newValue)
+    private IEnumerator DelayedHandleNewLocation(LocationData previousValue, LocationData newValue)
     {
-        yield return new WaitForSeconds(2f);
+        yield return new WaitForSeconds(1f); // Wait for 1 second
 
-        PreviousLocationScene = CurrentLocationScene;
-
-        if (IsServer)
+        if (IsServer && !previousValue.Equals(newValue))
         {
-            if (newValue.ID != 0)
+            PreviousLocationScene = CurrentLocationScene;
+
+            if (newValue.ID != 0) 
             {
                 if (previousValue.ID != 0) FindObjectOfType<LevelGenerator.Scripts.LevelGenerator>().Cleanup();
 
                 NetworkManager.SceneManager.OnLoadEventCompleted += UnloadPreviousLocation;
 
-                yield return new WaitForEndOfFrame();
-
-                NetworkManager.SceneManager.LoadScene(newValue.Name, LoadSceneMode.Additive);
-
-                CurrentLocationScene = SceneManager.GetSceneByName(newValue.Name);
-
-                yield return new WaitForEndOfFrame();
+                NetworkManager.SceneManager.LoadScene(newValue.SceneName, LoadSceneMode.Additive);
+                
+                CurrentLocationScene = SceneManager.GetSceneByName(newValue.SceneName);
 
                 TimeManager.Singleton.StartGameTime();
             }
-            else
+            else 
             {
                 FindObjectOfType<LevelGenerator.Scripts.LevelGenerator>().Cleanup();
 
@@ -113,7 +166,6 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-
     private void UnloadPreviousLocation(string sceneName, LoadSceneMode loadSceneMode, List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
         if (!PreviousLocationScene.isLoaded) return;
@@ -122,20 +174,20 @@ public class GameManager : NetworkBehaviour
 
         // Unload the previous scene
         NetworkManager.SceneManager.UnloadScene(PreviousLocationScene);
-    }
 
-    public void TriggerDeathFromQuestFailure(int questID)
+    }
+    [Rpc(SendTo.Server)]
+    public void EndGameRpc(GameOverReason reason)
     {
-        print("Faild Quest: " + questID);
-    }
 
+    }
     [Rpc(SendTo.Server, RequireOwnership = false)]
     public void AddPlayerDataRpc(FixedString32Bytes name, ulong id, bool isAlive, NetworkObjectReference reference)
     {
         PlayerData playerdata = new()
         {
             Name = name,
-            ID = id,
+            clientID = id,
             IsAlive = isAlive,
             Reference = reference
         };
@@ -147,7 +199,8 @@ public class GameManager : NetworkBehaviour
     {
         for (int i = 0; i < PlayerDatas.Count; i++)
         {
-            if (PlayerDatas[i].ID == disconnectedClientId){
+            if (PlayerDatas[i].clientID == disconnectedClientId)
+            {
                 PlayerDatas.RemoveAt(i);
             }
         }
@@ -158,53 +211,25 @@ public class GameManager : NetworkBehaviour
     {
         for (int i = 0; i < PlayerDatas.Count; i++)
         {
-            if (PlayerDatas[i].ID == ClientId){
+            if (PlayerDatas[i].clientID == ClientId)
+            {
                 PlayerData information = PlayerDatas[i];
                 information.IsAlive = value;
                 PlayerDatas[i] = information;
             }
         }
     }
-}
-
-[Serializable]
-public struct LocationData : INetworkSerializable{
-    public string Name;
-    public int ID;
-    public int Cost;
-    public int AbundantEntityID;
-
-    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    public ItemInfo GetItemFromID(int id)
     {
-        serializer.SerializeValue(ref Name);
-        serializer.SerializeValue(ref ID);
-        serializer.SerializeValue(ref Cost);
-        serializer.SerializeValue(ref AbundantEntityID);
+        foreach (var item in Items)
+        {
+            if (item.ID == id)
+            {
+                return item;
+            }
+        }
+        return null;
     }
 }
 
-[Serializable]
-public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
-{
-    public FixedString32Bytes Name;
-    public NetworkObjectReference Reference;
-    public ulong ID;
-    public bool IsAlive;
-    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
-    {
-        serializer.SerializeValue(ref Name);
-        serializer.SerializeValue(ref ID);
-        serializer.SerializeValue(ref IsAlive);
-        serializer.SerializeValue(ref Reference);
-    }
-    public bool Equals(PlayerData data)
-    {
-        return Name.Equals(data.Name) && ID == data.ID && IsAlive == data.IsAlive;
-    }
-}
-[Serializable]
-public struct DepthDepletionRate
-{
-    public int depthThreshold;
-    public float depletionRate;
-}
+

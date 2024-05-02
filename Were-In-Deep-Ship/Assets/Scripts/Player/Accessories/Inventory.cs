@@ -1,5 +1,6 @@
 using System;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.Animations;
 
@@ -18,6 +19,7 @@ public class Inventory : NetworkBehaviour
     public NetworkVariable<sbyte> CurrentSlot = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     public NetworkVariable<int> CurrentWeight = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     
+    public SkinnedMeshRenderer skinnedMeshRenderer;
     public DivingSuit currentSuit;
     public Transform handPos;
     public Transform dropPos;
@@ -28,7 +30,7 @@ public class Inventory : NetworkBehaviour
     public event Action<int> UISelectSlotEvent;
     public event Action<int,bool> UISetSlotImageEvent;
     public event Action<Sprite> UISetArmorEvent;
-
+    public event Action<InventorySlot> BatteryUpdateCheck;
 
     [Header("Inventory Slots")]
 
@@ -36,13 +38,13 @@ public class Inventory : NetworkBehaviour
 
     private void Start()
     {
+        networkObjectReference = new(NetworkObject);
+
         if (!IsOwner) return;
 
         inputManager = InputManager.Instance;
 
         GetComponent<Interaction>().ItemPickupEvent += PickupCheck;
-
-        networkObjectReference = new(NetworkObject);
 
         originalMaterial = GetComponentInChildren<SkinnedMeshRenderer>().material;
         originalMesh = GetComponentInChildren<SkinnedMeshRenderer>().sharedMesh;
@@ -64,11 +66,21 @@ public class Inventory : NetworkBehaviour
             inputManager.Slot5ThisFrame() ? 4 : 
         -1);
 
-        if (slotIndex != -1) SelectSlotRpc(slotIndex, networkObjectReference);
+        if (slotIndex != -1) SelectSlotRpc(slotIndex);
 
         if (inputManager.DroppedThisFrame() && InventorySlots[CurrentSlot.Value].itemNetworkObject != null) 
         {
-            DropItemRpc(networkObjectReference);
+            if (InventorySlots[CurrentSlot.Value].itemInfo == null) return;
+
+            switch(InventorySlots[CurrentSlot.Value].itemInfo.ItemType)
+            {
+                case ItemType.Usable:  
+                    IUsable usable = InventorySlots[CurrentSlot.Value].itemInfo.GetComponent<IUsable>();
+                    usable?.Drop(networkObjectReference);
+                    break;
+            }
+            DropItemServerRpc();
+            BatteryUpdateCheck?.Invoke(InventorySlots[CurrentSlot.Value]);
         }
         if (inputManager.RightBumperThisFrame())
         {
@@ -85,13 +97,13 @@ public class Inventory : NetworkBehaviour
             switch(InventorySlots[CurrentSlot.Value].itemInfo.ItemType)
             {
                 case ItemType.Equippable:
-                    EquipSuitRpc(networkObjectReference);
+                    DivingSuit suit = InventorySlots[CurrentSlot.Value].itemInfo.equippable as DivingSuit;
+                    EquipSuitRpc(suit.Level);
                     break;
                 case ItemType.Usable:  
                     IUsable usable = InventorySlots[CurrentSlot.Value].itemInfo.GetComponent<IUsable>();
-                    usable.Use(networkObjectReference);
+                    usable?.Use(networkObjectReference);
                     break;
-
             }
         }
         ScrollWheelNavigation(inputManager.ScrollWheelMoved().y);
@@ -104,14 +116,14 @@ public class Inventory : NetworkBehaviour
         int slotOffset = value > 0 ? -1 : 1;
         sbyte newSlot = (sbyte)((CurrentSlot.Value + slotOffset + 5) % 5); // Ensures cyclic behavior
 
-        SelectSlotRpc(newSlot, networkObjectReference);
+        SelectSlotRpc(newSlot);
     }
 
     private void BumperNavigation(bool value)
     {
         int newSlot = value ? (CurrentSlot.Value == 0 ? 4 : CurrentSlot.Value - 1): 
                               (CurrentSlot.Value == 4 ? 0 : CurrentSlot.Value + 1);
-        SelectSlotRpc((sbyte)newSlot, networkObjectReference);
+        SelectSlotRpc((sbyte)newSlot);
     }
 
 
@@ -134,206 +146,220 @@ public class Inventory : NetworkBehaviour
                         slot = i;
                     }
 
-                    PickupItemRpc((sbyte)slot ,networkObject, networkObjectReference);
+                    PickupItemRpc((sbyte)slot ,networkObject);
+                    BatteryUpdateCheck?.Invoke(InventorySlots[CurrentSlot.Value]);
 
                     return;
                 }
             }
         }
     }
-    [Rpc(SendTo.Everyone, Delivery = RpcDelivery.Reliable)]
-    private void EquipSuitRpc(NetworkObjectReference playerReference)
+    [Rpc(SendTo.Everyone)]
+    private void EquipSuitRpc(int suitValue)
     {
-        if (playerReference.TryGet(out NetworkObject playerNetworkObject))
+        foreach (var item in GameManager.Singleton.DivingSuits)
         {
-            Inventory inventory = playerNetworkObject.GetComponent<Inventory>();
-            DivingSuit suit = inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo.equippable as DivingSuit;
-
-            if (inventory.currentSuit != null)
+            if (item.Level == suitValue)
             {
-                if (inventory.currentSuit.Level > suit.Level && IsOwner)
+                DivingSuit suit = GameManager.Singleton.DivingSuits[suitValue];
+                if (currentSuit.Level < suit.Level)
                 {
-                    Debug.LogWarning("Your Equipped Suit is better then that one!");
+                    if (IsOwner)
+                    {
+                        suit.SetEffects(NetworkObject);
+
+                        UISetArmorEvent?.Invoke(suit.SuitImage);
+
+                        RemoveItemBySlotRpc(true, CurrentSlot.Value);
+                    }
+
+                    currentSuit = suit;
+
+                    skinnedMeshRenderer.material = suit.SuitMaterial;
+                    skinnedMeshRenderer.sharedMesh = suit.SuitMesh;
+                    return;
+                }
+                else
+                {
+                    if (IsOwner)
+                    {
+                        Debug.LogWarning("Your Equipped Suit is better then that one!");
+                    }
                     return;
                 }
             }
+            
+        }
+
+    }
+
+    [Rpc(SendTo.Server)]
+    public void PickupItemRpc(sbyte slot, NetworkObjectReference itemReference)
+    {
+        if (itemReference.TryGet(out NetworkObject itemNetworkObject))
+        {
+            itemNetworkObject.TrySetParent(NetworkObject, false);
+
+            itemNetworkObject.GetComponent<NetworkTransform>().Teleport(handPos.position, Quaternion.identity, Vector3.one);
+
+            itemNetworkObject.transform.LookAt(handPos.forward);
+
+            PickupItemClientRpc(slot, itemReference);
+
+        }
+        
+    }
+
+    [Rpc(SendTo.Everyone)]
+    public void PickupItemClientRpc(sbyte slot, NetworkObjectReference itemReference)
+    {
+        if (itemReference.TryGet(out NetworkObject itemNetworkObject))
+        {
+            ParentConstraint parentConstraint = itemNetworkObject.GetComponent<ParentConstraint>();
+
+            ItemInfo info = itemNetworkObject.GetComponent<ItemInfo>();
+
+            info.rb.isKinematic = true;
+            info.GetComponent<Collider>().isTrigger = true;
 
             if (IsOwner)
             {
-                suit.SetEffects(playerNetworkObject);
+                CurrentWeight.Value += itemNetworkObject.GetComponent<ItemInfo>().ItemWeight.Value;
+                
+                SelectSlotRpc(slot);
 
-                UISetArmorEvent?.Invoke(suit.SuitImage);
+                info.OnPickedUp(NetworkObject);
 
-                RemoveItemBySlotRpc(true, CurrentSlot.Value, playerReference);
+                info.TogglePickedUpRpc(true);
+
+                UISetSlotImageEvent?.Invoke(slot, true);
             }
 
-            inventory.currentSuit = suit;
-
-            inventory.GetComponentInChildren<SkinnedMeshRenderer>().material = suit.SuitMaterial;
-            inventory.GetComponentInChildren<SkinnedMeshRenderer>().sharedMesh = suit.SuitMesh;
-        }
-    }
-
-    [Rpc(SendTo.Everyone, Delivery = RpcDelivery.Reliable)]
-    public void PickupItemRpc(sbyte slot, NetworkObjectReference itemReference, NetworkObjectReference playerReference)
-    {
-        if (playerReference.TryGet(out NetworkObject playerNetworkObject))
-        {
-            if (itemReference.TryGet(out NetworkObject itemNetworkObject))
+            if (parentConstraint.sourceCount > 0)
             {
-                Inventory inventory = playerNetworkObject.GetComponent<Inventory>();
-                
-                SelectSlotRpc(slot, playerReference);
-
-                ParentConstraint parentConstraint = itemNetworkObject.GetComponent<ParentConstraint>();
-
-                ItemInfo info = itemNetworkObject.GetComponent<ItemInfo>();
-
-                if (IsOwner)
-                {
-                    CurrentWeight.Value += itemNetworkObject.GetComponent<ItemInfo>().ItemWeight.Value;
-
-                    info.TogglePickedUpRpc(true);
-
-                    UISetSlotImageEvent?.Invoke(slot, true);
-                }
-
-                if (parentConstraint.sourceCount > 0)
-                {
-                    parentConstraint.RemoveSource(0);
-                }
-
-                ConstraintSource constraintSource = new()
-                {
-                    sourceTransform = inventory.handPos,
-                    weight = 1
-                };
-
-                parentConstraint.AddSource(constraintSource);
-                
-                itemNetworkObject.transform.localScale = info.originalScale;
-
-                itemNetworkObject.gameObject.layer = 2;
-
-                itemNetworkObject.transform.LookAt(handPos.forward);
-
-                if (info.IsOnTable.Value)
-                {
-                    BarteringTable.Singleton.RemoveFromTableRpc(info.gameObject.GetInstanceID());
-                }
-
-                if (IsServer)
-                {
-                    itemNetworkObject.ChangeOwnership(playerNetworkObject.OwnerClientId);
-
-                    itemNetworkObject.TrySetParent(playerNetworkObject, false);
-                }
-
-                inventory.InventorySlots[slot] = new()
-                {
-                    itemNetworkObject = itemNetworkObject,
-                    
-                    itemInfo = info,
-
-                };
-
+                parentConstraint.RemoveSource(0);
             }
-            else Debug.LogError("Failed to get =ITEM= Reference in Inventory at PickupItemRpc");
+
+            ConstraintSource constraintSource = new()
+            {
+                sourceTransform = handPos,
+                weight = 1
+            };
+
+            parentConstraint.AddSource(constraintSource);
+
+            itemNetworkObject.gameObject.layer = 2;
+
+
+            InventorySlots[slot] = new()
+            {
+                itemNetworkObject = itemNetworkObject,
+                
+                itemInfo = info,
+
+            };
+
         }
-        else Debug.LogError("Failed to get =PLAYER= Reference in Inventory at PickupItemRpc");
+        else Debug.LogError("Failed to get =ITEM= Reference in Inventory at PickupItemRpc");
     }
     
-    [Rpc(SendTo.Everyone, Delivery = RpcDelivery.Reliable)]
-    public void DropItemRpc(NetworkObjectReference playerReference)
+    [Rpc(SendTo.Server)]
+    public void DropItemServerRpc()
     {
-        if (playerReference.TryGet(out NetworkObject playerNetworkObject))
-        {
-            if (playerNetworkObject.TryGetComponent(out Inventory inventory))
-            {
-                InventorySlot slot = inventory.InventorySlots[inventory.CurrentSlot.Value];
+        InventorySlot slot = InventorySlots[CurrentSlot.Value];
 
-                if (IsServer)
-                {
-                    slot.itemNetworkObject.TryRemoveParent();
+        slot.itemNetworkObject.TryRemoveParent();
 
-                }
+        slot.itemNetworkObject.GetComponent<NetworkTransform>().Teleport(dropPos.position, Quaternion.identity, Vector3.one);
 
-                slot.itemNetworkObject.GetComponent<ParentConstraint>().RemoveSource(0);
+        slot.itemNetworkObject.GetComponent<Rigidbody>().position = dropPos.position;
 
-                if (IsOwner)
-                {
-                    slot.itemNetworkObject.GetComponent<Rigidbody>().position = inventory.dropPos.position;
-                    slot.itemNetworkObject.transform.position = inventory.dropPos.position;
+        DropItemClientRpc();
 
-                    slot.itemInfo.TogglePickedUpRpc(false);
-
-                    CurrentWeight.Value -= slot.itemInfo.ItemWeight.Value;
-                }   
-
-
-                slot.itemNetworkObject.gameObject.layer = 6;
-
-                inventory.InventorySlots[inventory.CurrentSlot.Value] = new()
-                {
-                    itemInfo = null,
-                    itemNetworkObject = null,
-                };
-                UISetSlotImageEvent?.Invoke(inventory.CurrentSlot.Value, false);
-            }
-        }
     }
 
-    [Rpc(SendTo.Everyone, Delivery = RpcDelivery.Reliable)]
-    public void SelectSlotRpc(sbyte value, NetworkObjectReference playerReference)
+    [Rpc(SendTo.Everyone)]
+    public void DropItemClientRpc()
+    {
+        InventorySlot slot = InventorySlots[CurrentSlot.Value];
+
+        slot.itemInfo.rb.isKinematic = false;
+
+        slot.itemNetworkObject.GetComponent<Collider>().isTrigger = false;
+
+        slot.itemNetworkObject.GetComponent<ParentConstraint>().RemoveSource(0);
+
+        if (IsOwner)
+        {
+
+            UISetSlotImageEvent?.Invoke(CurrentSlot.Value, false);
+
+            slot.itemInfo.OnDropped(NetworkObject);
+
+            slot.itemInfo.TogglePickedUpRpc(false);
+
+            CurrentWeight.Value -= slot.itemInfo.ItemWeight.Value;
+        }   
+
+        slot.itemNetworkObject.GetComponent<Rigidbody>().rotation = Quaternion.identity;
+
+        slot.itemNetworkObject.gameObject.layer = 6;
+
+        InventorySlots[CurrentSlot.Value] = new()
+        {
+            itemInfo = null,
+            itemNetworkObject = null,
+        };
+
+    }
+    [Rpc(SendTo.Everyone)]
+    public void SelectSlotRpc(sbyte value)
     {
         if (IsOwner) 
         {
             CurrentSlot.Value = value;
             UISelectSlotEvent?.Invoke(value);
+            BatteryUpdateCheck?.Invoke(InventorySlots[value]);
         }
-        if (playerReference.TryGet(out NetworkObject playerNetworkObject))
+        for (int i = 0; i < InventorySlots.Length; i++)
         {
-            Inventory inventory = playerNetworkObject.GetComponent<Inventory>();
-
-            for (int i = 0; i < inventory.InventorySlots.Length; i++)
+            if (InventorySlots[i].itemNetworkObject != null)
             {
-                if (inventory.InventorySlots[i].itemNetworkObject != null)
+                if (InventorySlots[i] == InventorySlots[value])
                 {
-                    if (inventory.InventorySlots[i] == inventory.InventorySlots[value])
-                    {
-                        inventory.InventorySlots[i].itemNetworkObject.gameObject.SetActive(true);
-                    }
-                    else 
-                    {
-                        inventory.InventorySlots[i].itemNetworkObject.gameObject.SetActive(false);
-                    }
+                    InventorySlots[i].itemNetworkObject.gameObject.SetActive(true);
+                }
+                else 
+                {
+                    InventorySlots[i].itemNetworkObject.gameObject.SetActive(false);
                 }
             }
-
         }
     }
-    [Rpc(SendTo.Everyone, Delivery = RpcDelivery.Reliable)]
-    public void RemoveItemBySlotRpc(bool despawn, sbyte value, NetworkObjectReference playerReference)
+    [Rpc(SendTo.Everyone)]
+    public void RemoveItemBySlotRpc(bool despawn, sbyte value)
     {
-        if (playerReference.TryGet(out NetworkObject playerNetworkObject))
+        if (IsServer && despawn && InventorySlots[value].itemNetworkObject != null)
         {
-            Inventory inventory = playerNetworkObject.GetComponent<Inventory>();
-
-            if (IsServer && despawn && inventory.InventorySlots[value].itemNetworkObject != null)
-            {
-                 inventory.InventorySlots[value].itemNetworkObject.Despawn(true);
-            }
-
-            inventory.InventorySlots[value] = new()
-            {
-                itemInfo = null,
-
-                itemNetworkObject = null,
-            };
-            if (IsOwner) UISetSlotImageEvent?.Invoke(value, false);
+            InventorySlots[value].itemNetworkObject.Despawn(true);
         }
+        
+        if (IsOwner)
+        {
+            BatteryUpdateCheck?.Invoke(InventorySlots[CurrentSlot.Value]);
+            UISetSlotImageEvent?.Invoke(value, false);
+        }
+
+        InventorySlots[value] = new()
+        {
+            itemInfo = null,
+            itemNetworkObject = null,
+        };
+
+
+        
     }
-    [Rpc(SendTo.Server, Delivery = RpcDelivery.Reliable)]
+    [Rpc(SendTo.Server)]
     public void AddItemToInventoryRpc(int id, NetworkObjectReference reference)
     {
         if (reference.TryGet(out NetworkObject playerNetworkObject))
@@ -362,7 +388,8 @@ public class Inventory : NetworkBehaviour
                                     slot = i;
                                 }
 
-                                inventory.PickupItemRpc((sbyte)slot ,networkObject, networkObjectReference);
+                                inventory.PickupItemRpc((sbyte)slot ,networkObject);
+                                inventory.BatteryUpdateCheck?.Invoke(InventorySlots[CurrentSlot.Value]);
 
                                 return;
                             }

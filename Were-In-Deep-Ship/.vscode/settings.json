@@ -51,5 +51,7 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Were In Deep Ship HDRP.sln"
+    "dotnet.defaultSolution": "Were-In-Deep-Ship.sln",
+    "editor.tokenColorCustomizations": {},
+    "workbench.colorCustomizations": {}
 }

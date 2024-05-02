@@ -73,10 +73,19 @@ namespace LevelGenerator.Scripts
 
         void Start()
         {
-            if (!IsServer) return;
+            try
+            {
+                if (!IsServer) return;
 
-            ItemGenerator = GetComponent<ItemGenerator>();
-            SpawnServerRpc();
+                ItemGenerator = GetComponent<ItemGenerator>();
+                SpawnServerRpc();
+            }
+            catch (IndexOutOfRangeException ex)
+            {
+                Debug.LogError("Caught an IndexOutOfRangeException: " + ex.Message);
+                Cleanup();
+                Start();
+            }
         }
 
         [Rpc(SendTo.Server,RequireOwnership = false)]

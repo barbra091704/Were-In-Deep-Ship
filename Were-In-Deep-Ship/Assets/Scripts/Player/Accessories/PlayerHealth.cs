@@ -3,12 +3,23 @@ using UnityEngine;
 
 public class PlayerHealth : NetworkBehaviour, IDamagable
 {
-    public NetworkVariable<int> Health = new(100, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
-    public NetworkVariable<int> Resistance = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    public NetworkVariable<int> Health = new(100);
+    public NetworkVariable<int> Resistance = new(0);
 
     public override void OnNetworkSpawn()
     {
         GetComponent<Oxygen>().AsphyxiateEvent += TakeDamageRpc;
+    }
+
+    public void TakeDamage(int value, bool applyResistance)
+    {
+        TakeDamageRpc(value, applyResistance);
+    }
+
+    [Rpc(SendTo.Server)]
+    public void SetResistanceRpc(int value)
+    {
+        Resistance.Value = value;
     }
 
     [Rpc(SendTo.Server)]
@@ -27,17 +38,18 @@ public class PlayerHealth : NetworkBehaviour, IDamagable
 
         if (health.Health.Value <= 0)
         {
-            DieRpc(NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject);
+            DieRpc(rpcParams.Receive.SenderClientId, NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject);
         }
     }
     [Rpc(SendTo.Everyone)]
-    public void DieRpc(NetworkObjectReference reference)
+    public void DieRpc(ulong id, NetworkObjectReference reference)
     {
         if (reference.TryGet(out NetworkObject networkObject))
         {
             networkObject.gameObject.SetActive(false);
 
-            if (IsOwner) GameManager.Singleton.SetPlayerAliveStateServerRpc(OwnerClientId, false);
+            if (IsServer)
+                GameManager.Singleton.SetPlayerAliveStateServerRpc(id, false);
         }
     }
 }

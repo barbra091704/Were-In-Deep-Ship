@@ -16,8 +16,7 @@ GameObject:
   - component: {fileID: 4254960046390926551}
   - component: {fileID: 7207100414701442083}
   - component: {fileID: 3510553923121145364}
-  - component: {fileID: 4766651584010281143}
-  - component: {fileID: 8013413295758494427}
+  - component: {fileID: 7859715264427035032}
   m_Layer: 6
   m_Name: Suit2
   m_TagString: Item
@@ -76,7 +75,7 @@ MonoBehaviour:
   ID: 5
   ItemType: 1
   KeyType: 0
-  itemImage: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  itemImage: {fileID: 10911, guid: 0000000000000000f000000000000000, type: 0}
   ItemTier:
     m_InternalValue: 2
   ItemWeight:
@@ -90,17 +89,11 @@ MonoBehaviour:
   IsOnFloatingPlatform:
     m_InternalValue: 0
   equippable: {fileID: 11400000, guid: 7094fa86079f45a42b98e43531e5774c, type: 2}
-  gravitySpeed: 5
-  groundOffset: 1
   minMaxWeight: {x: 5, y: 15}
   minMaxValue: {x: 15, y: 50}
   minMaxDrag: {x: 0, y: 6}
-  layerMask:
-    serializedVersion: 2
-    m_Bits: 8
-  originalRotation: {x: 0, y: 0, z: 0, w: 0}
-  originalScale: {x: 0, y: 0, z: 0}
   ItemName: Suit 2
+  rb: {fileID: 0}
   showVariables: 1
 --- !u!33 &6978856672027503917
 MeshFilter:
@@ -218,12 +211,12 @@ Rigidbody:
     m_Bits: 0
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
-  m_UseGravity: 0
+  m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
   m_Constraints: 112
   m_CollisionDetection: 0
---- !u!114 &4766651584010281143
+--- !u!114 &7859715264427035032
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -232,7 +225,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 9118426049983342954}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f98539990730ab459fd5426fbfec5a0, type: 3}
+  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   UseUnreliableDeltas: 0
@@ -242,9 +235,9 @@ MonoBehaviour:
   SyncRotAngleX: 0
   SyncRotAngleY: 0
   SyncRotAngleZ: 0
-  SyncScaleX: 1
-  SyncScaleY: 1
-  SyncScaleZ: 1
+  SyncScaleX: 0
+  SyncScaleY: 0
+  SyncScaleZ: 0
   PositionThreshold: 0.001
   RotAngleThreshold: 0.01
   ScaleThreshold: 0.01
@@ -254,16 +247,3 @@ MonoBehaviour:
   InLocalSpace: 0
   Interpolate: 1
   SlerpPosition: 0
-  authorityMode: 1
---- !u!114 &8013413295758494427
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9118426049983342954}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f6c0be61502bb534f922ebb746851216, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 

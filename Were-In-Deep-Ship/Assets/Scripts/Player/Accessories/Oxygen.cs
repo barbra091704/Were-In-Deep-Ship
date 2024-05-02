@@ -5,13 +5,14 @@ using UnityEngine;
 
 public class Oxygen : NetworkBehaviour
 {
-    public NetworkVariable<float> CurrentOxygenTankLevel = new(30, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
-    public NetworkVariable<int> CurrentOxygenTankCapacity = new(30, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
-    public NetworkVariable<int> DepthBeforeCustomRates = new(50, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    public NetworkVariable<float> CurrentOxygenLevel = new(30);
+    public NetworkVariable<int> CurrentOxygenTankCapacity = new(30);
+    public NetworkVariable<int> DepthBeforeCustomRates = new(50);
     public int defaultOxygenLevel = 30;
     public int defaultDepthRate = 50;
     public int asphyxiationDamage = 8;
     public float damageInterval;
+    public float ylevelOffset;
     private float oxygenDepletionRate = 2f;
     private float oxygenTimer = 0;
     private float asphyxiateTimer = 0f;
@@ -26,9 +27,9 @@ public class Oxygen : NetworkBehaviour
         GetComponent<PlayerMovement>().InWater.OnValueChanged += IsInWater;
         GetComponent<DepthSensor>().Depth.OnValueChanged += UpdateOxygenDepletionRate;
 
-        CurrentOxygenTankCapacity.Value = defaultOxygenLevel;
-        CurrentOxygenTankCapacity.Value = defaultOxygenLevel;
-        DepthBeforeCustomRates.Value = defaultDepthRate;
+        SetOxygenLevelRpc(defaultOxygenLevel);
+        SetOxygenTankCapacityRpc(defaultOxygenLevel);
+        SetDepthThresholdRpc(defaultDepthRate);
     }
 
 
@@ -41,22 +42,20 @@ public class Oxygen : NetworkBehaviour
             AsphyxiationCheck();
             oxygenTimer += Time.deltaTime;
 
-            if (oxygenTimer >= 3f) // Decrease oxygen every second
+            if (oxygenTimer >= 3f)
             {
                 oxygenTimer = 0f;
-                CurrentOxygenTankLevel.Value -= oxygenDepletionRate;
-                CurrentOxygenTankLevel.Value = Mathf.Clamp(CurrentOxygenTankLevel.Value, 0, CurrentOxygenTankCapacity.Value);
+                SetOxygenLevelRpc(CurrentOxygenLevel.Value - oxygenDepletionRate);
             }
         }
 
-        if (!WaterSystem.IsPositionUnderWater(new(transform.position.x, transform.position.y + 0.5f, transform.position.z)))
+        if (!WaterSystem.IsPositionUnderWater(new(transform.position.x, transform.position.y + ylevelOffset, transform.position.z)))
         {
             oxygenTimer += Time.deltaTime;
-            if (oxygenTimer >= 0.1f && CurrentOxygenTankLevel.Value < CurrentOxygenTankCapacity.Value)
+            if (oxygenTimer >= 0.1f && CurrentOxygenLevel.Value < CurrentOxygenTankCapacity.Value)
             {
                 oxygenTimer = 0f;
-                CurrentOxygenTankLevel.Value += 2f;
-                CurrentOxygenTankLevel.Value = Mathf.Clamp(CurrentOxygenTankLevel.Value, 0, CurrentOxygenTankCapacity.Value);
+                SetOxygenLevelRpc(CurrentOxygenLevel.Value + 2f);
             }
         }
         
@@ -75,7 +74,7 @@ public class Oxygen : NetworkBehaviour
     {
         int lastPassedThreshold = -1; // Initialize with a value that represents no threshold passed
 
-        foreach (var depthRate in GameManager.Singleton.OxygenDepthDepletionRates)
+        foreach (var depthRate in WaterManager.Singleton.OxygenDepletionRates)
         {
             if (currentDepth >= depthRate.depthThreshold && depthRate.depthThreshold > lastPassedThreshold)
             {
@@ -88,7 +87,7 @@ public class Oxygen : NetworkBehaviour
 
     void AsphyxiationCheck()
     {
-        if (CurrentOxygenTankLevel.Value <= 0 || currentDepth > DepthBeforeCustomRates.Value)
+        if (CurrentOxygenLevel.Value <= 0 || currentDepth > DepthBeforeCustomRates.Value)
         {
             asphyxiateTimer += Time.deltaTime;
             
@@ -108,5 +107,23 @@ public class Oxygen : NetworkBehaviour
         InWater = newValue;
         oxygenTimer = 0;
         asphyxiateTimer = 0;
+    }
+
+    [Rpc(SendTo.Server)]
+    public void SetDepthThresholdRpc(int value)
+    {
+        DepthBeforeCustomRates.Value = value;
+    }
+
+    [Rpc(SendTo.Server)]
+    public void SetOxygenLevelRpc(float value)
+    {
+        CurrentOxygenLevel.Value = value;
+        CurrentOxygenLevel.Value = Mathf.Clamp(CurrentOxygenLevel.Value, 0, CurrentOxygenTankCapacity.Value);
+    }
+    [Rpc(SendTo.Server)]
+    public void SetOxygenTankCapacityRpc(int value)
+    {
+        CurrentOxygenTankCapacity.Value = value;
     }
 }

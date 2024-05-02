@@ -234,8 +234,8 @@ GameObject:
   - component: {fileID: 8253498948430950515}
   - component: {fileID: 1410626020879567267}
   - component: {fileID: 3072649672589907558}
-  - component: {fileID: -9054937596468589711}
-  - component: {fileID: 911341659105981919}
+  - component: {fileID: 8056637717651466363}
+  - component: {fileID: -5512956850153671114}
   m_Layer: 6
   m_Name: Flashlight Tier2
   m_TagString: Item
@@ -295,7 +295,7 @@ MonoBehaviour:
   ID: 2
   ItemType: 4
   KeyType: 0
-  itemImage: {fileID: 0}
+  itemImage: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
   ItemTier:
     m_InternalValue: 2
   ItemWeight:
@@ -309,17 +309,11 @@ MonoBehaviour:
   IsOnFloatingPlatform:
     m_InternalValue: 0
   equippable: {fileID: 0}
-  gravitySpeed: 5
-  groundOffset: 1.5
   minMaxWeight: {x: 4, y: 5}
   minMaxValue: {x: 0, y: 0}
   minMaxDrag: {x: 0, y: 5}
-  layerMask:
-    serializedVersion: 2
-    m_Bits: 8
-  originalRotation: {x: 0, y: 0, z: 0, w: 0}
-  originalScale: {x: 0, y: 0, z: 0}
   ItemName: Durable Flashlight
+  rb: {fileID: 0}
   showVariables: 1
 --- !u!114 &1432115219494265648
 MonoBehaviour:
@@ -381,7 +375,7 @@ Rigidbody:
     m_Bits: 0
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
-  m_UseGravity: 0
+  m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
   m_Constraints: 112
@@ -401,7 +395,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -458,7 +452,7 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4191948996817515057}
   m_Mesh: {fileID: 7093865552591528335, guid: d3cd410fc72833a4584afa63b44c5b50, type: 3}
---- !u!114 &-9054937596468589711
+--- !u!114 &8056637717651466363
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -467,7 +461,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4191948996817515057}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f98539990730ab459fd5426fbfec5a0, type: 3}
+  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   UseUnreliableDeltas: 0
@@ -489,8 +483,7 @@ MonoBehaviour:
   InLocalSpace: 0
   Interpolate: 1
   SlerpPosition: 0
-  authorityMode: 1
---- !u!114 &911341659105981919
+--- !u!114 &-5512956850153671114
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

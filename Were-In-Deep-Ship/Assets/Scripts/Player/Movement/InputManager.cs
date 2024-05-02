@@ -104,7 +104,9 @@ public class InputManager : NetworkBehaviour
     public bool PingPressed(){
         return playerControls.Actions.Ping.triggered;
     }
-
+    public bool EscapePressed(){
+        return playerControls.Actions.Back.triggered;
+    }
 
 
 

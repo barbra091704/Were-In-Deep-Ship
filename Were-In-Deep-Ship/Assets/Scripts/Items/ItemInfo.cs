@@ -19,7 +19,6 @@ public enum KeyType{
 }
 
 [RequireComponent(typeof(Rigidbody), typeof(ParentConstraint), typeof(NetworkObject))]
-[RequireComponent(typeof(ClientNetworkTransform), typeof(NetworkRigidbody))]
 public class ItemInfo : NetworkBehaviour
 {   
     public int ID;
@@ -30,30 +29,36 @@ public class ItemInfo : NetworkBehaviour
     public NetworkVariable<int> ItemWeight = new();
     public NetworkVariable<int> ItemValue = new();
     public NetworkVariable<bool> IsPickedUp = new();
-    public NetworkVariable<bool> IsOnTable = new();
+    public NetworkVariable<bool> IsOnCrate = new();
     public NetworkVariable<bool> IsOnFloatingPlatform = new();
     [SerializeReference] public ScriptableObject equippable;
-    [SerializeField] private float gravitySpeed;
-    [SerializeField] private float groundOffset = 1;
     [SerializeField] private Vector2Int minMaxWeight;
     [SerializeField] private Vector2Int minMaxValue;
     [SerializeField] private Vector2Int minMaxDrag;
-    [SerializeField] private LayerMask layerMask;
-    [HideInInspector] public Quaternion originalRotation;
-    [HideInInspector] public Vector3 originalScale;
     public string ItemName;
-    private Rigidbody rb;
-    private WaterSystem waterSurface;
+    public Rigidbody rb;
     public bool showVariables;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        waterSurface = FindObjectOfType<WaterSystem>();
-        originalRotation = Quaternion.identity;
-        originalScale = transform.localScale;
     }
 
+    public void OnPickedUp(NetworkObject player)
+    {
+        if (IsOnCrate.Value) SellingCrate.Singleton.RemoveFromTableRpc(gameObject.GetInstanceID());
+        
+        switch(ItemType)
+        {
+            case ItemType.Usable:
+            // initialize setting battery with event to ui
+                break;
+        }
+    }
+    public void OnDropped(NetworkObject player)
+    {
+
+    }
     public void Start()
     {
         if (IsServer)
@@ -61,49 +66,27 @@ public class ItemInfo : NetworkBehaviour
             ItemWeight.Value = Random.Range(minMaxWeight.x, minMaxWeight.y);
             ItemValue.Value = Random.Range(minMaxValue.x, minMaxValue.y);
             if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit))
-                transform.position = hit.point;
+            {
+                GetComponent<NetworkTransform>().Teleport(hit.point, Quaternion.identity, Vector3.one);
+            }
         }
     }
-    void FixedUpdate()
+    public void FixedUpdate()
     {
-        WaterSurfaceData data = waterSurface.GetCurrentWaterSurfaceData(transform.position);
-        if (!data.IsActualDataReady) return;
-        if (!IsPickedUp.Value && !IsTouchingGround()){
-            rb.drag = transform.position.y < data.Position.y ? minMaxDrag.y : minMaxDrag.x; // x is air y is underwater
-            rb.AddForce(Vector3.down * gravitySpeed, ForceMode.Force);
-        }
+        if (transform.parent != null) return;
+
+        rb.drag = WaterSystem.IsPositionUnderWater(transform.position) ? minMaxDrag.y : minMaxDrag.x;
     }
-    public override void OnNetworkObjectParentChanged(NetworkObject parentNetworkObject) 
-    {
-        if (parentNetworkObject == null || !IsServer) return;
-        if (parentNetworkObject.CompareTag("Player"))
-        {
-            IsOnFloatingPlatform.Value = false;
-            rb.isKinematic = false; 
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
-            GetComponent<Collider>().isTrigger = false;
-        }
-    }
+
     void OnCollisionEnter(Collision collision)
     {
-        transform.rotation = originalRotation;
-        if (collision.collider.gameObject.layer == 4)
-            waterSurface = collision.transform.GetComponent<WaterSystem>();
-
-        if (!IsServer || IsOnFloatingPlatform.Value || IsPickedUp.Value) return;
-
-        if (collision.transform.TryGetComponent(out FloatingPlatform component))
+        if (!IsServer || IsPickedUp.Value) return;
+        
+        if (collision.collider.CompareTag("Pier") || collision.collider.CompareTag("Boat"))
         {
-            IsOnFloatingPlatform.Value = true;
-            rb.isKinematic = true;
-            rb.interpolation = RigidbodyInterpolation.None;
-            GetComponent<Collider>().isTrigger = true;
-            GetComponent<NetworkObject>().TrySetParent(collision.transform);
+            NetworkObject.TrySetParent(collision.transform);
         }
     }
-
-
-    bool IsTouchingGround() { return Physics.Raycast(transform.position, Vector3.down, 0.1f * groundOffset, layerMask); }
 
     [Rpc(SendTo.Server,RequireOwnership = false)]
     public void TogglePickedUpRpc(bool value)
@@ -195,18 +178,6 @@ public class ItemInfoAttributes : Editor {
             EditorGUILayout.Space();
 
             EditorGUILayout.PropertyField(serializedObject.FindProperty("ItemName"));
-
-            EditorGUILayout.Space();
-
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("layerMask"));
-
-            EditorGUILayout.Space();
-
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("gravitySpeed"));
-            
-            EditorGUILayout.Space();
-
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("groundOffset"));
 
             EditorGUILayout.Space();
 

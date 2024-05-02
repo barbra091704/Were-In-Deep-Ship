@@ -9,42 +9,38 @@ public class ShopRack : NetworkBehaviour
     public ShopItem currentSelectedItem;
     public Canvas purchaseCanvas;
     public TMP_Text cost;
+    private NetworkObject player;
 
-    private NetworkObject currentPlayer;
     public void OpenMenu(NetworkObject player)
     {
         if (player != null)
         {
-            cost.text = $"Cost: ${currentSelectedItem.itemCost}";
-            currentPlayer = player;
-            purchaseCanvas.enabled = true;
-            GUIManager.Singleton.AddGUI();
         }
     }
     public void CloseMenu()
     {
-        if (currentPlayer != null)
+        if (player != null)
         {
             purchaseCanvas.enabled = false;
-            currentPlayer = null;
             GUIManager.Singleton.RemoveGUI();
         }
     }
     public void PurchaseItem()
     {
-        PurchaseItemRpc();
         CloseMenu();
     }
 
     [Rpc(SendTo.Server)]
-    public void PurchaseItemRpc()
+    public void PurchaseItemRpc(NetworkObjectReference playerReference, int id, int cost)
     {
-        if (currentSelectedItem == null || currentPlayer == null) return;
-
-        if (currentPlayer.TryGetComponent(out Inventory inventory))
+        if (playerReference.TryGet(out NetworkObject networkObject))
         {
-            inventory.AddItemToInventoryRpc(currentSelectedItem.PurchaseItem.ID, currentPlayer);
-            GameManager.Singleton.Credits.Value -= currentSelectedItem.itemCost;
+            if (networkObject.TryGetComponent(out Inventory inventory))
+            {
+                print("purhcased");
+                inventory.AddItemToInventoryRpc(id, playerReference);
+                GameManager.Singleton.Credits.Value -= cost;
+            }
         }
     }
 }

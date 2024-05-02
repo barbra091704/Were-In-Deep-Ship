@@ -2,5 +2,5 @@ using Unity.Netcode;
 using UnityEngine;
 public interface IInteractable
 {
-    void Interact(RaycastHit hit, NetworkObject Player);
+    void Interact<T>(RaycastHit hit, NetworkObject player, T type = default);
 }   

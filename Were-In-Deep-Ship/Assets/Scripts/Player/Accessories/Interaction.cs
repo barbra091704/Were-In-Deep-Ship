@@ -4,7 +4,7 @@ using Unity.Netcode;
 public class Interaction : NetworkBehaviour
 {
     [SerializeField] private float interactDelay = 1.0f; // Delay for interaction
-    [SerializeField] private float interactDistance = 4f;
+    [SerializeField] private float interactDistance = 2f;
     [SerializeField] private int delayedInteractionLayer = 7; // Specific layer for delayed interaction
     [SerializeField] private float delayedInteractionTime = 0.5f;
     [SerializeField] private LayerMask layerMask; // All interactable layers
@@ -103,9 +103,19 @@ public class Interaction : NetworkBehaviour
             ItemPickupEvent?.Invoke(hitInfo);
             return;
         }
-
+        
         IInteractable interactable = hitInfo.collider.GetComponent<IInteractable>() ?? hitInfo.collider.transform.parent.GetComponent<IInteractable>();
-        interactable?.Interact(hitInfo, transform.GetComponent<NetworkObject>());
+        
+        if (hitInfo.collider.transform.CompareTag("TerminalButtonUp"))
+        {
+            interactable?.Interact(hitInfo, NetworkObject, true);
+        }
+        else if (hitInfo.collider.transform.CompareTag("TerminalButtonDown"))
+        {
+            interactable?.Interact(hitInfo, NetworkObject, false);
+        }
+
+        interactable?.Interact(hitInfo, NetworkObject, -1);
     }
 
     private void HandleDelayedInteraction(RaycastHit hitInfo)

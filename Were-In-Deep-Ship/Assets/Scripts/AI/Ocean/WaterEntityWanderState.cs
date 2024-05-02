@@ -14,6 +14,7 @@ public class WaterEntityWanderState : WaterEntityBaseState
         currentSpline = FindNewSpline(main);
         index = Random.Range(0, currentSpline.Count);
         targetPoint = GetNearestKnot(main);
+        main.ChangeAnimationState(main.SwimAnimationName);
     }
 
     public override void FixedUpdateState(WaterEntityAI main)

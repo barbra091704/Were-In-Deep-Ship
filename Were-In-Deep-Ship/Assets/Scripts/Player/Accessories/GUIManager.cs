@@ -10,12 +10,14 @@ public class GUIManager : NetworkBehaviour
     public static GUIManager Singleton { get; private set;}
 
     public NetworkVariable<bool> isInGui = new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
-    public int GUIAmountOpen;
+    public List<IGUI> openGUIs = new();
+    public int openGUICount;
     public Canvas UI;
     private PlayerMovement playerMovement;
     private PlayerCamera playerCamera;
     private Interaction interaction;
 
+    private InputManager inputManager;
     void Start()
     {
         if (!IsOwner) return;
@@ -25,16 +27,26 @@ public class GUIManager : NetworkBehaviour
 
         isInGui.OnValueChanged += ToggleUI;
 
+        inputManager = GetComponent<InputManager>();
         playerMovement = GetComponent<PlayerMovement>();
         interaction = GetComponent<Interaction>();
         playerCamera = GetComponent<PlayerCamera>();
     }
 
-    private void ToggleUI(bool previousValue, bool newValue)
+    void Update()
+    {
+        if (!IsOwner) return;
+
+        if (inputManager.EscapePressed() && openGUIs.Count > 0)
+        {
+            RemoveGUI();
+        }
+    }
+    public void ToggleUI(bool _, bool newValue)
     {
         if(!newValue)
         {
-            playerMovement.canMove = true;
+            playerMovement.CanMove = true;
             interaction.canInteract = true;
             playerCamera.canLook = true;
             UI.enabled = true;
@@ -43,7 +55,7 @@ public class GUIManager : NetworkBehaviour
         }
         else
         {
-            playerMovement.canMove = false;
+            playerMovement.CanMove = false;
             interaction.canInteract = false;
             playerCamera.canLook = false;
             UI.enabled = false; 
@@ -52,16 +64,17 @@ public class GUIManager : NetworkBehaviour
         }
     }
 
-    public void AddGUI()
+    public void AddGUI(IGUI newGui)
     {
         if (IsOwner)
         {
-            if (GUIAmountOpen == 0)
+            if (openGUIs.Count == 0)
             {
                 isInGui.Value = true;
             }
             
-            GUIAmountOpen++;
+            openGUIs.Add(newGui);
+            openGUICount++;
         }
     }
 
@@ -69,14 +82,16 @@ public class GUIManager : NetworkBehaviour
     {
         if (IsOwner)
         {
-            if (GUIAmountOpen <= 1)
+            if (openGUIs.Count > 0)
             {
-                isInGui.Value = false;
-                GUIAmountOpen = 0;
-            }
-            else
-            {
-                GUIAmountOpen--;
+                openGUIs[^1].CloseGUI();
+                openGUIs.RemoveAt(openGUIs.Count -1);
+                openGUICount--;
+
+                if (openGUIs.Count == 0)
+                {
+                    isInGui.Value = false;
+                }
             }
         }
     }

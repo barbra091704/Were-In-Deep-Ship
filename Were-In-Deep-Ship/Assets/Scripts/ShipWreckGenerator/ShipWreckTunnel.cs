@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 
 public class ShipWreckTunnel : MonoBehaviour, IInteractable
@@ -12,10 +13,9 @@ public class ShipWreckTunnel : MonoBehaviour, IInteractable
 
     void Awake()
     {
-        // Ensure there's a list for this channel
         if (!tunnelsByChannel.ContainsKey(Channel))
         {
-            tunnelsByChannel[Channel] = new List<ShipWreckTunnel>();
+            tunnelsByChannel[Channel] = new();
         }
 
         // Add this tunnel to the list for its channel
@@ -36,30 +36,29 @@ public class ShipWreckTunnel : MonoBehaviour, IInteractable
         }
     }
 
-    public void Interact(RaycastHit hit = default, NetworkObject player = null)
+    public void Interact<T>(RaycastHit hit, NetworkObject player, T type)
     {
         if (player == null) return;
 
-        // Check if there's another tunnel for this channel
+        // Check if theres another tunnel for this channel
         if (tunnelsByChannel.TryGetValue(Channel, out List<ShipWreckTunnel> channelTunnels))
         {
-            // Find the other tunnel that is not 'this'
+            // Find the other tunnel that is not this
             foreach (var tunnel in channelTunnels)
             {
-                if (tunnel != this) // Found the other tunnel
+                if (tunnel != this)
                 {
-                    ShipWreckTunnel targetTunnel = tunnel;
-                    PlayerMovement movement = player.GetComponent<PlayerMovement>();
-                    if (targetTunnel.OverridePosition && targetTunnel.overrideTransform != null)
+                    var transform = player.GetComponent<NetworkTransform>();
+
+                    if (tunnel.OverridePosition && tunnel.overrideTransform != null)
                     {
-                        movement.transform.position = targetTunnel.overrideTransform.position;
+                        transform.Teleport(tunnel.overrideTransform.position, Quaternion.identity, Vector3.one);
                     }
                     else
                     {
-                        movement.transform.position = targetTunnel.transform.position;
+                        transform.Teleport(tunnel.overrideTransform.position, Quaternion.identity, Vector3.one);
                     }
-                    movement.CurrentState = movement.GroundState;
-                    break; // Exit the loop after handling teleportation
+                    break;
                 }
             }
         }

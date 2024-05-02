@@ -1,86 +1,81 @@
 using UnityEngine;
-using Unity.Netcode;
 using System;
-
+using Unity.Netcode;
+using UnityEngine.PlayerLoop;
 
 public class QuestManager : NetworkBehaviour, IInteractable
 {
     public static QuestManager Singleton;
 
+    public NetworkVariable<int> CurrentQuestID;
+
     public QuestSO CurrentQuest;
 
-    public QuestSO[] QuestLists;
+    public QuestSO[] Quests;
 
-    public float CurrentQuestTime;
-
-    public event Action<Sprite, string, int> SetQuestItemInfo;
+    public event Action<Sprite, string, int> OnQuestInfoUpdated;
 
     void Awake()
     {
-        if (Singleton != null && Singleton != this) Destroy(this);
-        else Singleton = this;
-    }
-    public override void OnNetworkSpawn()
-    {
-        if (!IsServer) return;
-
-        TimeManager.Singleton.DayEventTriggered += CheckQuestTime;
-
-        int i = UnityEngine.Random.Range(0, QuestLists.Length);
-
-        SetQuestRpc(i);
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        if (!IsServer) return;
-
-        TimeManager.Singleton.DayEventTriggered -= CheckQuestTime;
-    }
-
-    [Rpc(SendTo.Everyone)]
-    public void SetQuestRpc(int i)
-    {
-        Singleton.CurrentQuest = QuestLists[i];
-        Singleton.CurrentQuestTime = 0;
-
-        Singleton.SetQuestItemInfo?.Invoke(Singleton.CurrentQuest.sprite, Singleton.CurrentQuest.ItemInfo.name, Singleton.CurrentQuest.DaysToComplete);
-    }
-    
-    private void CheckQuestTime(int daysPassed)
-    {
-        if (daysPassed >= CurrentQuest.DaysToComplete)
+        if (Singleton != null && Singleton != this)
         {
-            GameManager.Singleton.TriggerDeathFromQuestFailure(CurrentQuest.QuestID);
+            Destroy(gameObject);
+            return;
+        }
+        Singleton = this;
+    }
+
+    public void Start()
+    {
+        CurrentQuestID.OnValueChanged += UpdateQuestInfo;
+
+        if (IsServer)
+        {
+            SelectRandomQuest();
         }
         else
         {
-            CurrentQuestTime++;
+            UpdateQuestInfo(0, CurrentQuestID.Value);
         }
+    }
+    public override void OnNetworkDespawn()
+    {
+        CurrentQuestID.OnValueChanged -= UpdateQuestInfo;
+    }
+
+    private void UpdateQuestInfo(int previousValue, int newValue)
+    {
+        Sprite sprite = Quests[newValue].sprite;
+        CurrentQuest = Quests[newValue];
+        OnQuestInfoUpdated?.Invoke(sprite, CurrentQuest.ItemInfo.name, CurrentQuest.DaysToComplete);
+    }
+
+    public void SelectRandomQuest()
+    {
+        CurrentQuestID.Value = UnityEngine.Random.Range(0, Quests.Length);
+
+        CurrentQuest = Quests[CurrentQuestID.Value];
     }
 
     [Rpc(SendTo.Server)]
-    public void OnQuestCompleteRpc()
+    public void CompleteQuestRpc()
     {
-        int i = UnityEngine.Random.Range(0, QuestLists.Length);
+        int reward = CurrentQuest.Reward;
+        GameManager.Singleton.Credits.Value += reward;
 
-        GameManager.Singleton.Credits.Value += CurrentQuest.Reward;
-
-        TimeManager.Singleton.DaysPassed.Value = 0;
-
-        SetQuestRpc(i);
+        SelectRandomQuest();
     }
 
-    public void Interact(RaycastHit hit, NetworkObject Player)
+    public void Interact<T>(RaycastHit hit, NetworkObject Player, T type)
     {
-        if (Player.TryGetComponent<Inventory>(out var inventory))
+        if (Player.TryGetComponent(out Inventory inventory))
         {
-            if (inventory.InventorySlots[inventory.CurrentSlot.Value].itemNetworkObject != null && inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo.ID == CurrentQuest.ItemID)
+            if (inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo != null && inventory.InventorySlots[inventory.CurrentSlot.Value].itemInfo.ID == CurrentQuest.ItemID)
             {
-                inventory.RemoveItemBySlotRpc(true, inventory.CurrentSlot.Value, Player);
-                OnQuestCompleteRpc();
+                inventory.RemoveItemBySlotRpc(true, inventory.CurrentSlot.Value);
+                CompleteQuestRpc();
             }
         }
     }
-
 }
+
